@@ -1,10 +1,14 @@
 [build]
 target = 'aarch64-apple-ios-sim'
+#target = 'wasm32-unknown-unknown'
+[target.aarch64-apple-ios-sim]
+
+# These require rightly
 rustflags = [
-    "-C", "instrument-coverage",
-#"-C", "link-arg=-Wl,-segprot,__LLVM_COV,rwx,rwx",
-#"-C", "link-arg=-Wl,-no_compact_unwind"
-#"-C", "link-arg=-Wl,-segprot,__LLVM_COV,rwx,rwx",
-    "-C", "llvm-args=-runtime-counter-relocation",
+#"-C", "instrument-coverage",
+#"-C", "llvm-args=-runtime-counter-relocation",
 #"-Znext-solver=coherence"
 ]
+
+[target.wasm32-unknown-unknown]
+rustflags = ["-C", "link-arg=-zstack-size=8388608", "--cfg", 'getrandom_backend="custom"']

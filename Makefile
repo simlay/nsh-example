@@ -1,5 +1,4 @@
 EMULATOR='booted'
-OTHER_EMULATOR='iPhone 17'
 DEVICE_ID=aoeu
 TEAM_ID=aoeu
 
@@ -12,7 +11,7 @@ DINGHY_CONTAINER=$(shell $(DINGHY_CONTAINER_CMD) data)
 
 XCTEST_CONTAINER_CMD=$(GET_CONTAINER) $(XCWRAPPER_ID)
 XCTEST_CONTAINER=$(shell $(XCTEST_CONTAINER_CMD) data)
-LAUNCH=xcrun simctl launch --console --terminate-running-process $(EMULATOR)
+LAUNCH=xcrun simctl launch --terminate-running-process $(EMULATOR)
 
 #LLVM_COV=xcrun llvm-cov
 #LLVM_PROFDATA=xcrun llvm-profdata
@@ -43,14 +42,6 @@ debug: install
 
 debug-wait: install
 	xcrun simctl launch --wait-for-debugger --console --terminate-running-process $(EMULATOR) $(WRAPPER_ID)
-
-CURR_EMULATOR:=$(shell cat ./target/emulator)
-run-no-wait: bundle
-	xcrun simctl install "$(CURR_EMULATOR)" ./RustWrapper.app/
-	SIMCTL_CHILD_RUST_BACKTRACE=full SIMCTL_CHILD_RUST_LOG=trace xcrun simctl launch "$(CURR_EMULATOR)" $(WRAPPER_ID)
-	if [ -z "$(CURR_EMULATOR)" ]; then echo $(OTHER_EMULATOR) > ./target/emulator; fi
-	if [ "$(CURR_EMULATOR)" = $(EMULATOR) ]; then echo $(OTHER_EMULATOR) > ./target/emulator; fi
-	if [ "$(CURR_EMULATOR)" = $(OTHER_EMULATOR) ]; then echo $(EMULATOR) > ./target/emulator; fi
 
 
 watch-swap:
@@ -134,7 +125,7 @@ sign-bundle: device-bundle device-add-entitlements
 	codesign -vvv -d  --entitlements - --xml ./RustUITests-Runner.app/
 
 ui-tests-build:
-	cargo build -p ui_tests
+	cargo build --target aarch64-apple-ios-sim -p ui_tests
 
 ui-tests-bundle-tools: ui-tests-build
 	cp $(shell xcode-select --print-path)/Platforms/IPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/XCTRunner                ./RustUITests-Runner.app/
@@ -143,6 +134,8 @@ ui-tests-bundle-tools: ui-tests-build
 	cp -r $(shell xcode-select --print-path)/Platforms/IPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestSupport.framework        ./RustUITests-Runner.app/Frameworks/
 	#cp -r $(shell xcode-select --print-path)/Platforms/IPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCUnit.framework               ./RustUITests-Runner.app/Frameworks/
 	cp -r $(shell xcode-select --print-path)/Platforms/IPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework ./RustUITests-Runner.app/Frameworks/
+	cp $(shell xcode-select --print-path)/Platforms/IPhoneSimulator.platform/Developer/usr/lib/lib_TestingInterop.dylib ./RustUITests-Runner.app/Frameworks/
+	rm -r RustUITests-Runner.app/Frameworks/_Testing_CoreTransferable.framework
 
 ui-tests-bundle: ui-tests-bundle-tools
 	cp ./target/aarch64-apple-ios-sim/debug/ui_tests  ./RustUITests-Runner.app/Plugins/DinghyUITests.xctest/
@@ -160,11 +153,16 @@ ui-tests-xctest-configuration: ui-tests-install
 
 ui-tests-run: install ui-tests-install ui-tests-xctest-configuration
 	SIMCTL_CHILD_DINGHY_LLVM_PROFILE_FILE="$(DINGHY_CONTAINER)/Documents/dinghy.profraw" SIMCTL_CHILD_LLVM_PROFILE_FILE="$(XCTEST_CONTAINER)/Documents/xctrunner.profraw" $(LAUNCH) $(XCWRAPPER_ID) 2>&1 | tee $(PWD)/stdout.txt
+	sleep 5
 	make ui-tests-cp-screenshot
 
 ui-tests-cp-screenshot:
-	cp "$(XCTEST_CONTAINER)/Documents/screenshot.png" ui_tests.png
-	sips -Z 1278 ui_tests.png
+	@mkdir -p ui_screenshots
+	@XCTEST_DIR="$(XCTEST_CONTAINER)/Documents"; \
+	for f in "$$XCTEST_DIR"/*.png; do \
+		[ -f "$$f" ] && cp "$$f" "ui_screenshots/"; \
+	done
+	@for f in ui_screenshots/*.png; do sips -Z 1278 "$$f" > /dev/null; done
 
 ui-tests-cov: ui-tests-run
 	mkdir -p target/cov

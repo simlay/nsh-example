@@ -1,4 +1,5 @@
 #![no_main] // Required, we build this with `-bundle`.
+
 use objc2::{ClassType, MainThreadOnly, define_class};
 use objc2_foundation::NSString;
 use objc2_foundation::{
@@ -6,8 +7,8 @@ use objc2_foundation::{
 };
 use objc2_xc_test::XCTestCase;
 use objc2_xc_ui_automation::{
-    XCUIApplication, XCUIDevice, XCUIElementTypeQueryProvider, XCUIScreenshot,
-    XCUIScreenshotProviding,
+    XCUIApplication, XCUIDevice, XCUIElementTypeQueryProvider, XCUIElementAttributes,
+    XCUIScreenshot, XCUIScreenshotProviding,
 };
 
 define_class!(
@@ -24,17 +25,13 @@ define_class!(
         #[unsafe(method(tearDown))]
         fn tear_down(&self) {
             // Test teardown code in here.
-            //let app = XCUIApplication::new(self.mtm());
-            //app.terminate();
         }
 
         #[unsafe(method(testScreenshot))]
         fn test_screenshot(&self) {
             let app = XCUIApplication::new(self.mtm());
             let device = XCUIDevice::sharedDevice(self.mtm());
-            take_screenshot(&app, &device);
-            // Run your test code in here.
-
+            take_screenshots(&app, &device);
         }
     }
 );
@@ -45,8 +42,7 @@ unsafe fn setup() {
     let _ = TestCase::class();
 }
 
-fn take_screenshot(app: &XCUIApplication, device: &XCUIDevice) {
-    //println!("LAUNCHING APPLICATION");
+fn take_screenshots(app: &XCUIApplication, _device: &XCUIDevice) {
     use objc2_foundation::{NSDictionary, ns_string};
 
     // SIMCTL_CHILD_DINGHY_LLVM_PROFILE_FILE
@@ -59,27 +55,73 @@ fn take_screenshot(app: &XCUIApplication, device: &XCUIDevice) {
                 ],
                 &[&NSString::from_str(val.as_str()), ns_string!("1")],
             );
-
         app.setLaunchEnvironment(&foo);
     }
-    //println!("APPLICATION LAUNCH ENV: {:?}", app.launchEnvironment());
+
     app.launch();
-    //device.setOrientation(objc2_ui_kit::UIDeviceOrientation::Portrait);
 
-    save_screenshot(&app.screenshot(), "screenshot".into());
-    println!("{}", app.debugDescription());
-    let text_view = app.textViews().elementBoundByIndex(1);
-    text_view.tap();
-    text_view.typeText(&NSString::from_str("THIS IS SOME TEXT"));
+    // Screenshot 1: Initial state - empty TODO list
+    save_screenshot(&app.screenshot(), "screenshot_initial".into());
+    println!("=== Initial screenshot saved ===");
 
-    //let siri = device.siriService();
-    //siri.activateWithVoiceRecognitionText(&NSString::from_str("What is the capital of germany?"));
+    // Find all text fields
+    let text_fields = app.textFields();
 
-    std::thread::sleep(std::time::Duration::from_millis(1000));
+    if text_fields.count() > 0 {
+        // Tap the first text field (input)
+        let input_field = text_fields.elementBoundByIndex(0);
 
-    save_screenshot(&app.screenshot(), "screenshot".into());
-    //device.pressButton(objc2_xc_ui_automation::XCUIDeviceButton::Home);
-    //device.pressButton(objc2_xc_ui_automation::XCUIDeviceButton::Home);
+        // Tap the input field
+        input_field.tap();
+        std::thread::sleep(std::time::Duration::from_millis(1000));
+
+        // Type a todo item
+        input_field.typeText(&NSString::from_str("Buy groceries"));
+        std::thread::sleep(std::time::Duration::from_millis(500));
+
+        // Screenshot after typing
+        save_screenshot(&app.screenshot(), "screenshot_after_typing".into());
+        println!("=== After typing screenshot saved ===");
+
+        // Find and tap the Add button
+        let all_buttons = app.buttons();
+
+        // Try to find Add button by iterating
+        let mut found_add = false;
+        for i in 0..all_buttons.count() {
+            let btn = all_buttons.elementBoundByIndex(i);
+            let label = btn.label();
+            let label_str = label.to_string();
+            if label_str.contains("Add") {
+                btn.tap();
+                found_add = true;
+                println!("Found and tapped Add button");
+                break;
+            }
+        }
+
+        if !found_add {
+            // Try tapping the first button
+            if all_buttons.count() > 0 {
+                all_buttons.elementBoundByIndex(0).tap();
+            }
+        }
+
+        std::thread::sleep(std::time::Duration::from_millis(1000));
+
+        // Screenshot after adding
+        save_screenshot(&app.screenshot(), "screenshot_after_add".into());
+        println!("=== After adding todo screenshot saved ===");
+
+        // Screenshot showing the todo item
+        save_screenshot(&app.screenshot(), "screenshot_todo_added".into());
+        println!("=== Todo added screenshot saved ===");
+    }
+
+    // Final screenshot
+    std::thread::sleep(std::time::Duration::from_millis(2000));
+    save_screenshot(&app.screenshot(), "screenshot_final".into());
+    println!("=== Final screenshot saved ===");
 }
 
 fn save_screenshot(screenshot: &XCUIScreenshot, basename: String) {
@@ -96,6 +138,5 @@ fn save_screenshot(screenshot: &XCUIScreenshot, basename: String) {
             .PNGRepresentation()
             .writeToFile_atomically(&NSString::from_str(path.to_str().unwrap()), false);
         assert!(res, "failed writing screenshot");
-        //let mut output = File::create(path).unwrap();
     }
 }
