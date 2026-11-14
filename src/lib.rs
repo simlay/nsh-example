@@ -4,6 +4,23 @@
 use nsh_core::prelude::*;
 use nsh_base::theme;
 
+// The nsh Android runtime, only when building for Android (a target-specific
+// dependency in `Cargo.toml`). Cargo exposes it under its lib name, `nsh`:
+// the runtime crate's own `[lib] name = "nsh"` (see the crate's Cargo.toml),
+// which is why the built `libnsh.so` is named that too.
+#[cfg(target_os = "android")]
+use nsh as platform;
+
+// Android entry point. The nsh Android runtime (`com.longbridge.nsh.AppActivity`,
+// in the `nsh` runtime) loads this crate as `libnsh.so`, calls
+// `Native.runRust(handle)`, which the `main!` macro below turns into
+// `run_root(handle, Root::of::<App>())`: the engine runs the Rust root on its
+// own thread while the activity drives the view. The library is built as a
+// `cdylib` named `nsh` (see `Cargo.toml`), so the runtime's
+// `System.loadLibrary("nsh")` finds it. Only compiled on Android.
+#[cfg(target_os = "android")]
+platform::main!(platform::Root::of::<App>());
+
 /// A single TODO item.
 #[derive(Clone, PartialEq)]
 struct Todo {

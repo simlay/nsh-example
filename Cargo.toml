@@ -8,6 +8,16 @@ publish = false
 members = ["ui_tests"]
 resolver = "2"
 
+# Built as a `cdylib` so it links into an APK as `libnsh.so`, and a `rlib` so
+# the desktop `[[bin]]` can link it. Do NOT name it `nsh` here: that collides
+# with the `nsh-platform-android` runtime crate's own lib name (`nsh`), which
+# confuses cargo's extern linking. Instead the Gradle script renames the
+# built `.so` to `libnsh.so` after cargo finishes (the runtime's
+# `System.loadLibrary("nsh")` looks for that file name). See the `android/`
+# Gradle project.
+[lib]
+crate-type = ["cdylib", "rlib"]
+
 [dependencies]
 nsh-core = "0.5.0"
 nsh-base = "0.5.0"

@@ -189,7 +189,67 @@ ui-tests-run-swift: install-swift ui-tests-install ui-tests-xctest-configuration
 		xcrun simctl launch --console $(EMULATOR) $(XCWRAPPER_ID) 2>&1 | tee $(PWD)/stdout.txt
 	make ui-tests-cp-screenshot
 
-.EXPORT_ALL_VARIABLES:
+# ---------------------------------------------------------------------------
+# Android (nsh runtime bundled via Gradle, built with cargo + the NDK -- no
+# nsh CLI involved).
+#
+# `make android-build` compiles the app's rust cdylib for every supported ABI
+# and drops each into the app module's `jniLibs/<abi>/` directory, renamed to
+# `libnsh.so` so the runtime's `System.loadLibrary("nsh")` finds it. The
+# Gradle modules live in `android/`.
+# ---------------------------------------------------------------------------
+
+ANDROID_DIR=android
+# The Gradle project lives in android/ beside the nsh checkout (nsh-example/nsh).
+# Override ANDROID_HOME in the shell to relocate the SDK/NDK.
+ANDROID_HOME ?= /opt/projects/Android/Sdk
+ANDROID_NDK ?= $(ANDROID_HOME)/ndk/26.3.11579264
+
+# <cargo triple> <abi dir> <ndk clang wrapper>
+ANDROID_TRIPLES := aarch64-linux-android:arm64-v8a:aarch64-linux-android26-clang \
+                   x86_64-linux-android:x86_64:x86_64-linux-android26-clang \
+                   armv7-linux-androideabi:armeabi-v7a:armv7a-linux-androideabi26-clang
+
+android-build:
+	@set -e; \
+	NDK=$(ANDROID_NDK); \
+	CLANG=$$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin; \
+	echo "==> building arm64-v8a"; \
+	env \
+		"CC_aarch64_linux_android=$$CLANG/aarch64-linux-android26-clang" \
+		"AR_aarch64_linux_android=$$CLANG/llvm-ar" \
+		"CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$$CLANG/aarch64-linux-android26-clang" \
+		ANDROID_NDK_ROOT=$$NDK \
+		cargo build --release --target aarch64-linux-android --lib; \
+	mkdir -p $(ANDROID_DIR)/app/src/main/jniLibs/arm64-v8a; \
+	cp target/aarch64-linux-android/release/libnsh_app_nsh_example.so $(ANDROID_DIR)/app/src/main/jniLibs/arm64-v8a/libnsh.so; \
+	echo "    -> $(ANDROID_DIR)/app/src/main/jniLibs/arm64-v8a/libnsh.so"; \
+	echo "==> building x86_64"; \
+	env \
+		"CC_x86_64_linux_android=$$CLANG/x86_64-linux-android26-clang" \
+		"AR_x86_64_linux_android=$$CLANG/llvm-ar" \
+		"CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER=$$CLANG/x86_64-linux-android26-clang" \
+		ANDROID_NDK_ROOT=$$NDK \
+		cargo build --release --target x86_64-linux-android --lib; \
+	mkdir -p $(ANDROID_DIR)/app/src/main/jniLibs/x86_64; \
+	cp target/x86_64-linux-android/release/libnsh_app_nsh_example.so $(ANDROID_DIR)/app/src/main/jniLibs/x86_64/libnsh.so; \
+	echo "    -> $(ANDROID_DIR)/app/src/main/jniLibs/x86_64/libnsh.so"; \
+	echo "==> building armeabi-v7a"; \
+	env \
+		"CC_armv7_linux_androideabi=$$CLANG/armv7a-linux-androideabi26-clang" \
+		"AR_armv7_linux_androideabi=$$CLANG/llvm-ar" \
+		"CARGO_TARGET_ARMV7_LINUX_ANDROIDEABI_LINKER=$$CLANG/armv7a-linux-androideabi26-clang" \
+		ANDROID_NDK_ROOT=$$NDK \
+		cargo build --release --target armv7-linux-androideabi --lib; \
+	mkdir -p $(ANDROID_DIR)/app/src/main/jniLibs/armeabi-v7a; \
+	cp target/armv7-linux-androideabi/release/libnsh_app_nsh_example.so $(ANDROID_DIR)/app/src/main/jniLibs/armeabi-v7a/libnsh.so; \
+	echo "    -> $(ANDROID_DIR)/app/src/main/jniLibs/armeabi-v7a/libnsh.so"
+
+android-install: android-build
+	$(ANDROID_DIR)/gradlew -p $(ANDROID_DIR) :app:assembleDebug --no-daemon
+
+# Android env is exported so downstream targets (e.g. adb install) inherit it.
+EXPORT_ALL_VARIABLES:
 SIMCTL_CHILD_RUST_BACKTRACE=full
 SIMCTL_CHILD_RUST_LOG=trace
 SIMCTL_CHILD_XCTestConfigurationFilePath=$(PWD)/ui_tests/ui_tests.xctestconfiguration
