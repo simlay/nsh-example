@@ -223,6 +223,7 @@ android-build:
 		"AR_aarch64_linux_android=$$CLANG/llvm-ar" \
 		"CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$$CLANG/aarch64-linux-android26-clang" \
 		ANDROID_NDK_ROOT=$$NDK \
+		BINDGEN_EXTRA_CLANG_ARGS=--sysroot=$$CLANG/../sysroot \
 		cargo build --release --target aarch64-linux-android --lib; \
 	mkdir -p $(ANDROID_DIR)/app/src/main/jniLibs/arm64-v8a; \
 	cp target/aarch64-linux-android/release/libnsh_app_nsh_example.so $(ANDROID_DIR)/app/src/main/jniLibs/arm64-v8a/libnsh.so; \
@@ -233,6 +234,7 @@ android-build:
 		"AR_x86_64_linux_android=$$CLANG/llvm-ar" \
 		"CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER=$$CLANG/x86_64-linux-android26-clang" \
 		ANDROID_NDK_ROOT=$$NDK \
+		BINDGEN_EXTRA_CLANG_ARGS=--sysroot=$$CLANG/../sysroot \
 		cargo build --release --target x86_64-linux-android --lib; \
 	mkdir -p $(ANDROID_DIR)/app/src/main/jniLibs/x86_64; \
 	cp target/x86_64-linux-android/release/libnsh_app_nsh_example.so $(ANDROID_DIR)/app/src/main/jniLibs/x86_64/libnsh.so; \
@@ -243,6 +245,7 @@ android-build:
 		"AR_armv7_linux_androideabi=$$CLANG/llvm-ar" \
 		"CARGO_TARGET_ARMV7_LINUX_ANDROIDEABI_LINKER=$$CLANG/armv7a-linux-androideabi26-clang" \
 		ANDROID_NDK_ROOT=$$NDK \
+		BINDGEN_EXTRA_CLANG_ARGS=--sysroot=$$CLANG/../sysroot \
 		cargo build --release --target armv7-linux-androideabi --lib; \
 	mkdir -p $(ANDROID_DIR)/app/src/main/jniLibs/armeabi-v7a; \
 	cp target/armv7-linux-androideabi/release/libnsh_app_nsh_example.so $(ANDROID_DIR)/app/src/main/jniLibs/armeabi-v7a/libnsh.so; \
@@ -267,6 +270,25 @@ android-install: android-build
 			adb install -r "$$APK"; \
 		}; \
 	}
+
+# Take per-view screenshots of the app by driving it through the `dev` host.
+#
+# `android-install` (below) builds the app (with the `dev` feature) and installs
+# it, then this builds the host-side `android-ui-tests` driver and runs it: it
+# starts a dev server, points the app's `DevActivity` at it over `adb reverse`,
+# drives a short scripted sequence, and writes the frame-synced screenshots to
+# `android/snapshots/`. No nsh CLI is used.
+android-ui-tests: android-install
+	@command -v adb >/dev/null 2>&1 || { echo "error: adb not found in PATH" >&2; exit 1; }; \
+	adb devices | grep -qE "[[:space:]]device$$" || { echo "error: no adb device attached" >&2; exit 1; }; \
+	HOST_TARGET=$(shell rustc --print host-tuple); \
+	SERIAL=$$(adb devices | grep -E "[[:space:]]device$$" | head -n 1 | awk '{print $$1}'); \
+	echo "==> building the host-side driver for $$HOST_TARGET"; \
+	cd android-ui-tests && \
+		cargo build --release --target $$HOST_TARGET; \
+	echo "==> running the driver (snapshots -> $(ANDROID_DIR)/snapshots)"; \
+	$(PWD)/android-ui-tests/target/$$HOST_TARGET/release/android-ui-tests \
+		$(ANDROID_DIR)/snapshots --device $$SERIAL
 
 # Android env is exported so downstream targets (e.g. adb install) inherit it.
 EXPORT_ALL_VARIABLES:

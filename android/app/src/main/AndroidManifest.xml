@@ -22,6 +22,17 @@
             </intent-filter>
         </activity>
 
+        <!--
+          The `dev` host: the runtime's test activity, declared only when the
+          :runtime module is built with the `dev` feature. It is not exported,
+          so only an explicit component launch (the `android-ui-tests` driver's
+          `am start ... com.longbridge.nsh.DevActivity`) can start it. It reads
+          the `url` extra (the dev server's ws:// address) and connects to it.
+        -->
+        <activity
+            android:name="com.longbridge.nsh.DevActivity"
+            android:exported="false" />
+
         <meta-data
             android:name="com.longbridge.nsh.RUST"
             android:value="true" />

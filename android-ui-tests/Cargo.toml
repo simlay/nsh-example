@@ -1,0 +1,23 @@
+[package]
+name = "android-ui-tests"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Headless driver that drives the nsh Android app (com.example.nshexample) via the `dev` host and captures its real, frame-synced screenshots."
+
+# A standalone dev tool (NOT part of the app's workspace): it only needs the
+# host-side `nsh-dev` protocol, not the app's Rust. Kept out of the app's
+# workspace so its host build isn't pulled toward the app's iOS default target.
+[workspace]
+
+[dependencies]
+# Host-side nsh test protocol (DevServer, TestStep, WS_PATH). Kept in sync with
+# the app's `nsh-platform-android` runtime, which resolves `nsh-dev 0.5.x`.
+nsh-dev = { version = "0.5.1", features = ["server"] }
+anyhow = "1"
+serde_json = "1"
+base64 = "0.22"
+
+[[bin]]
+name = "android-ui-tests"
+path = "src/main.rs"
