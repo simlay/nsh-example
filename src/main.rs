@@ -10,25 +10,27 @@ use nsh_platform_web as platform;
 // `run_app`. Android and iOS do not run this binary: they are hosted by the
 // nsh Android/iOS runtime, which calls the `Native.runRust` entry the `main!`
 // macro in `src/lib.rs` exports (see the `android/` Gradle project).
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "ios", target_os = "windows"))]
 fn main() -> impl std::process::Termination {
     env_logger::init();
     platform::run_app(
         platform::AppSource::Rust(platform::Root::of::<nsh_app_nsh_example::App>()),
         platform::AppOptions {
+            #[cfg(not(target_os = "ios"))]
             title: "nsh-example".to_owned(),
             #[cfg(any(target_os = "linux", target_os = "windows"))]
             app_id: "com.example.nshexample".to_owned(),
 
+            #[cfg(not(target_os = "ios"))]
             size: (480, 640),
             ..Default::default()
         },
     )
 }
 
-#[cfg(any(target_os = "android", target_os = "ios", target_arch = "wasm32"))]
+#[cfg(any(target_os = "android", target_arch = "wasm32"))]
 compile_error!(
-    "Run this binary on macOS, Windows or Linux; the nsh runtime hosts Android and iOS."
+    "the nsh runtime hosts Android and iOS."
 );
 
 /*
