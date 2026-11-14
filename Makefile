@@ -204,6 +204,9 @@ ANDROID_DIR=android
 # Override ANDROID_HOME in the shell to relocate the SDK/NDK.
 ANDROID_HOME ?= /opt/projects/Android/Sdk
 ANDROID_NDK ?= $(ANDROID_HOME)/ndk/26.3.11579264
+# Gradle's default user home (~/.gradle) may be read-only in sandboxes, so
+# keep the wrapper dist cache and build state in a project-local dir.
+GRADLE_USER_HOME ?= $(ANDROID_DIR)/.gradle-home
 
 # <cargo triple> <abi dir> <ndk clang wrapper>
 ANDROID_TRIPLES := aarch64-linux-android:arm64-v8a:aarch64-linux-android26-clang \
@@ -245,8 +248,25 @@ android-build:
 	cp target/armv7-linux-androideabi/release/libnsh_app_nsh_example.so $(ANDROID_DIR)/app/src/main/jniLibs/armeabi-v7a/libnsh.so; \
 	echo "    -> $(ANDROID_DIR)/app/src/main/jniLibs/armeabi-v7a/libnsh.so"
 
+# Build the debug APK and install it onto a device attached via adb.
+# The APK lives at android/app/build/outputs/apk/debug/app-debug.apk.
+#
+# Note: the explanatory comments below live ABOVE this recipe, not inside it —
+# a '#' comment line inside a '\'-continued recipe makes make split the recipe
+# into separate shells, so a shell variable set before the comment would not
+# be visible inside the install block. The APK path is therefore a Make
+# variable ($(APK)) expanded on every line rather than a shell variable.
 android-install: android-build
-	$(ANDROID_DIR)/gradlew -p $(ANDROID_DIR) :app:assembleDebug --no-daemon
+	@command -v adb >/dev/null 2>&1 || { echo "error: adb not found in PATH" >&2; exit 1; }; \
+	adb devices | grep -qE "[[:space:]]device$$" || { echo "error: no adb device attached" >&2; exit 1; }; \
+	GRADLE_USER_HOME=$(GRADLE_USER_HOME) ANDROID_HOME=$(ANDROID_HOME) $(ANDROID_DIR)/gradlew -p $(ANDROID_DIR) :app:assembleDebug --no-daemon && { \
+		APK=$(ANDROID_DIR)/app/build/outputs/apk/debug/app-debug.apk; \
+		adb install -r "$$APK" || { \
+			echo "install -r failed (likely a debug-signature conflict); uninstalling and retrying" >&2; \
+			adb uninstall com.example.nshexample >/dev/null 2>&1; \
+			adb install -r "$$APK"; \
+		}; \
+	}
 
 # Android env is exported so downstream targets (e.g. adb install) inherit it.
 EXPORT_ALL_VARIABLES:

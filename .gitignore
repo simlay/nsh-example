@@ -4,6 +4,15 @@ target/
 /android/app/src/main/jniLibs/
 # Machine-specific: SDK path. The build uses ANDROID_HOME instead.
 /android/local.properties
+# Gradle build outputs.
+/android/build/
+/android/.gradle/
+/android/app/build/
+/android/runtime/build/
+/android/app/.gradle/
+/android/runtime/.gradle/
+# Project-local Gradle user home (wrapper dist cache / build state).
+/android/.gradle-home/
 /RustWrapper.app/simple
 /RustWrapper.app/entitlements.plist
 /RustWrapper.app/_CodeSignature/
