@@ -5,7 +5,7 @@ edition = "2024"
 publish = false
 
 [workspace]
-members = ["ui_tests"]
+members = ["ui_tests", "android-ui-tests"]
 resolver = "2"
 
 # Built as a `cdylib` so it links into an APK as `libnsh.so`, and a `rlib` so

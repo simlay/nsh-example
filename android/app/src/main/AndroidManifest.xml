@@ -24,14 +24,15 @@
 
         <!--
           The `dev` host: the runtime's test activity, declared only when the
-          :runtime module is built with the `dev` feature. It is not exported,
-          so only an explicit component launch (the `android-ui-tests` driver's
-          `am start ... com.longbridge.nsh.DevActivity`) can start it. It reads
-          the `url` extra (the dev server's ws:// address) and connects to it.
+          :runtime module is built with the `dev` feature. It is exported so the
+          `android-ui-tests` driver can launch it with `adb shell am start`
+          (same as the nsh CLI's own `com.longbridge.nsh.host` host), passing the
+          `url` extra (the dev server's ws:// address); it connects to it. It has
+          no intent filter, so only an explicit component launch starts it.
         -->
         <activity
             android:name="com.longbridge.nsh.DevActivity"
-            android:exported="false" />
+            android:exported="true" />
 
         <meta-data
             android:name="com.longbridge.nsh.RUST"

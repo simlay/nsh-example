@@ -262,12 +262,20 @@ android-build:
 android-install: android-build
 	@command -v adb >/dev/null 2>&1 || { echo "error: adb not found in PATH" >&2; exit 1; }; \
 	adb devices | grep -qE "[[:space:]]device$$" || { echo "error: no adb device attached" >&2; exit 1; }; \
+	# Pin a device: prefer the emulator, else the first attached device (adb
+	# errors with 'more than one device' otherwise). SERIAL is a shell variable
+	# here, so it is visible inside the install block below.
+	SERIAL=$$(adb devices -l | grep -E "^emulator-" | head -n 1 | awk '{print $$1}'); \
+	if [ -z "$$SERIAL" ]; then \
+		SERIAL=$$(adb devices | grep -E "[[:space:]]device$$" | head -n 1 | awk '{print $$1}'); \
+	fi; \
+	echo "==> installing on $$SERIAL"; \
 	GRADLE_USER_HOME=$(GRADLE_USER_HOME) ANDROID_HOME=$(ANDROID_HOME) $(ANDROID_DIR)/gradlew -p $(ANDROID_DIR) :app:assembleDebug --no-daemon && { \
 		APK=$(ANDROID_DIR)/app/build/outputs/apk/debug/app-debug.apk; \
-		adb install -r "$$APK" || { \
+		adb -s $$SERIAL install -r "$$APK" || { \
 			echo "install -r failed (likely a debug-signature conflict); uninstalling and retrying" >&2; \
-			adb uninstall com.example.nshexample >/dev/null 2>&1; \
-			adb install -r "$$APK"; \
+			adb -s $$SERIAL uninstall com.example.nshexample >/dev/null 2>&1; \
+			adb -s $$SERIAL install -r "$$APK"; \
 		}; \
 	}
 
@@ -278,16 +286,24 @@ android-install: android-build
 # starts a dev server, points the app's `DevActivity` at it over `adb reverse`,
 # drives a short scripted sequence, and writes the frame-synced screenshots to
 # `android/snapshots/`. No nsh CLI is used.
+#
+# `android-ui-tests` is a member of the root workspace, so it builds into the
+# shared target/ dir and is built only for the host target (the root workspace's
+# iOS default target is overridden by --target below). The cargo registry is
+# already fetched, so the default (read-only) CARGO_HOME is fine.
 android-ui-tests: android-install
 	@command -v adb >/dev/null 2>&1 || { echo "error: adb not found in PATH" >&2; exit 1; }; \
 	adb devices | grep -qE "[[:space:]]device$$" || { echo "error: no adb device attached" >&2; exit 1; }; \
 	HOST_TARGET=$(shell rustc --print host-tuple); \
-	SERIAL=$$(adb devices | grep -E "[[:space:]]device$$" | head -n 1 | awk '{print $$1}'); \
-	echo "==> building the host-side driver for $$HOST_TARGET"; \
-	cd android-ui-tests && \
-		cargo build --release --target $$HOST_TARGET; \
+	# Prefer the emulator (what you started), else the first attached device. \
+	SERIAL=$$(adb devices -l | grep -E "^emulator-" | head -n 1 | awk '{print $$1}'); \
+	if [ -z "$$SERIAL" ]; then \
+		SERIAL=$$(adb devices | grep -E "[[:space:]]device$$" | head -n 1 | awk '{print $$1}'); \
+	fi; \
+	echo "==> building the host-side driver for $$HOST_TARGET (device $$SERIAL)"; \
+	cargo build --release --target $$HOST_TARGET -p android-ui-tests; \
 	echo "==> running the driver (snapshots -> $(ANDROID_DIR)/snapshots)"; \
-	$(PWD)/android-ui-tests/target/$$HOST_TARGET/release/android-ui-tests \
+	$(PWD)/target/$$HOST_TARGET/release/android-ui-tests \
 		$(ANDROID_DIR)/snapshots --device $$SERIAL
 
 # Android env is exported so downstream targets (e.g. adb install) inherit it.

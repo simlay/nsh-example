@@ -70,7 +70,17 @@ fn main() -> Result<()> {
         "127.0.0.1:0".parse::<SocketAddr>().unwrap(),
         BYTECODE_VERSION,
         None,
-        |_: nsh_dev::ClientEvent| {},
+        |event| {
+            match event {
+                nsh_dev::ClientEvent::Connected { device, .. } => {
+                    println!("[server] CONNECTED: {device}")
+                }
+                nsh_dev::ClientEvent::Disconnected { device, .. } => {
+                    println!("[server] DISCONNECTED: {device}")
+                }
+                other => println!("[server] event: {other:?}"),
+            }
+        },
     )
     .context("starting the dev server")?;
     let port = server.local_addr().port();
@@ -221,6 +231,9 @@ fn launch(adb: &Path, serial: &str, port: u16) -> Result<()> {
         &[
             "-s",
             serial,
+            // `am` is a device-side shell command, so it must be run through
+            // `adb shell` (adb itself has no `am` subcommand).
+            "shell",
             "am",
             "start",
             "-S", // force stop for a clean host

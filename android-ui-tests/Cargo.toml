@@ -5,10 +5,12 @@ edition = "2021"
 publish = false
 description = "Headless driver that drives the nsh Android app (com.example.nshexample) via the `dev` host and captures its real, frame-synced screenshots."
 
-# A standalone dev tool (NOT part of the app's workspace): it only needs the
-# host-side `nsh-dev` protocol, not the app's Rust. Kept out of the app's
-# workspace so its host build isn't pulled toward the app's iOS default target.
-[workspace]
+# A dev tool that drives the app through the `dev` host. It is a member of the
+# root workspace (built only for the host target), using nsh-dev's server
+# feature. Kept as a separate package from the app so its host-only build is
+# explicit and is never compiled for the app's iOS/Android targets.
+# (Do NOT add a `[workspace]` table here: that would make this crate the root
+# of its own workspace and drop it out of the root workspace entirely.)
 
 [dependencies]
 # Host-side nsh test protocol (DevServer, TestStep, WS_PATH). Kept in sync with
