@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+      The runtime's standalone activity for a Rust-root app. The
+      `com.longbridge.nsh.RUST` metadata tells it to call
+      `Native.runRust` (our `libnsh.so`'s `run_root` entry) instead of
+      loading a JS bundle. `AppActivity` is declared by the :runtime
+      library; it is not exported, so only the system launches it.
+    -->
+    <application
+        android:allowBackup="true"
+        android:label="nsh-example"
+        android:supportsRtl="true">
+
+        <activity
+            android:name="com.longbridge.nsh.AppActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <meta-data
+            android:name="com.longbridge.nsh.RUST"
+            android:value="true" />
+    </application>
+
+</manifest>

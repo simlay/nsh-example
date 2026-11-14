@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The runtime library itself declares no components: the :app module's
+  manifest launches com.longbridge.nsh.AppActivity. This minimal manifest
+  only carries the library's namespace (AGP reads it from `namespace`,
+  but a manifest is still required).
+-->
+<manifest />
