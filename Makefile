@@ -203,7 +203,7 @@ ANDROID_DIR=android
 # The Gradle project lives in android/ beside the nsh checkout (nsh-example/nsh).
 # Override ANDROID_HOME in the shell to relocate the SDK/NDK.
 ANDROID_HOME ?= /opt/projects/Android/Sdk
-ANDROID_NDK ?= $(ANDROID_HOME)/ndk/26.3.11579264
+ANDROID_NDK ?= $(shell for v in 29 27 26; do d=$$(ls -d $(ANDROID_HOME)/ndk/$$v.* 2>/dev/null | head -1); test -n "$$d" && echo "$$d" && exit 0; done; echo $(ANDROID_HOME)/ndk/26.3.11579264)
 # Gradle's default user home (~/.gradle) may be read-only in sandboxes, so
 # keep the wrapper dist cache and build state in a project-local dir.
 GRADLE_USER_HOME ?= $(ANDROID_DIR)/.gradle-home
@@ -229,37 +229,32 @@ APK := $(ANDROID_DIR)/app/build/outputs/apk/debug/app-debug.apk
 android-build:
 	@set -e; \
 	NDK=$(ANDROID_NDK); \
-	CLANG=$$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin; \
-	echo "==> building arm64-v8a"; \
+	OS_NAME=$$(echo "$$(uname -s)" | tr '[:upper:]' '[:lower:]'); \
+	CLANG=$$NDK/toolchains/llvm/prebuilt/$$OS_NAME-x86_64/bin; \
+	echo "==> building all Android ABIs"; \
 	env \
 		"CC_aarch64_linux_android=$$CLANG/aarch64-linux-android26-clang" \
 		"AR_aarch64_linux_android=$$CLANG/llvm-ar" \
 		"CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$$CLANG/aarch64-linux-android26-clang" \
-		ANDROID_NDK_ROOT=$$NDK \
-		BINDGEN_EXTRA_CLANG_ARGS=--sysroot=$$CLANG/../sysroot \
-		cargo build --release --target aarch64-linux-android --lib; \
-	mkdir -p $(ANDROID_DIR)/app/src/main/jniLibs/arm64-v8a; \
-	cp target/aarch64-linux-android/release/libnsh_app_nsh_example.so $(ANDROID_DIR)/app/src/main/jniLibs/arm64-v8a/libnsh.so; \
-	echo "    -> $(ANDROID_DIR)/app/src/main/jniLibs/arm64-v8a/libnsh.so"; \
-	echo "==> building x86_64"; \
-	env \
 		"CC_x86_64_linux_android=$$CLANG/x86_64-linux-android26-clang" \
 		"AR_x86_64_linux_android=$$CLANG/llvm-ar" \
 		"CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER=$$CLANG/x86_64-linux-android26-clang" \
-		ANDROID_NDK_ROOT=$$NDK \
-		BINDGEN_EXTRA_CLANG_ARGS=--sysroot=$$CLANG/../sysroot \
-		cargo build --release --target x86_64-linux-android --lib; \
-	mkdir -p $(ANDROID_DIR)/app/src/main/jniLibs/x86_64; \
-	cp target/x86_64-linux-android/release/libnsh_app_nsh_example.so $(ANDROID_DIR)/app/src/main/jniLibs/x86_64/libnsh.so; \
-	echo "    -> $(ANDROID_DIR)/app/src/main/jniLibs/x86_64/libnsh.so"; \
-	echo "==> building armeabi-v7a"; \
-	env \
 		"CC_armv7_linux_androideabi=$$CLANG/armv7a-linux-androideabi26-clang" \
 		"AR_armv7_linux_androideabi=$$CLANG/llvm-ar" \
 		"CARGO_TARGET_ARMV7_LINUX_ANDROIDEABI_LINKER=$$CLANG/armv7a-linux-androideabi26-clang" \
 		ANDROID_NDK_ROOT=$$NDK \
 		BINDGEN_EXTRA_CLANG_ARGS=--sysroot=$$CLANG/../sysroot \
-		cargo build --release --target armv7-linux-androideabi --lib; \
+		cargo build --release \
+			--target aarch64-linux-android \
+			--target x86_64-linux-android \
+			--target armv7-linux-androideabi \
+			--lib; \
+	mkdir -p $(ANDROID_DIR)/app/src/main/jniLibs/arm64-v8a; \
+	cp target/aarch64-linux-android/release/libnsh_app_nsh_example.so $(ANDROID_DIR)/app/src/main/jniLibs/arm64-v8a/libnsh.so; \
+	echo "    -> $(ANDROID_DIR)/app/src/main/jniLibs/arm64-v8a/libnsh.so"; \
+	mkdir -p $(ANDROID_DIR)/app/src/main/jniLibs/x86_64; \
+	cp target/x86_64-linux-android/release/libnsh_app_nsh_example.so $(ANDROID_DIR)/app/src/main/jniLibs/x86_64/libnsh.so; \
+	echo "    -> $(ANDROID_DIR)/app/src/main/jniLibs/x86_64/libnsh.so"; \
 	mkdir -p $(ANDROID_DIR)/app/src/main/jniLibs/armeabi-v7a; \
 	cp target/armv7-linux-androideabi/release/libnsh_app_nsh_example.so $(ANDROID_DIR)/app/src/main/jniLibs/armeabi-v7a/libnsh.so; \
 	echo "    -> $(ANDROID_DIR)/app/src/main/jniLibs/armeabi-v7a/libnsh.so"
