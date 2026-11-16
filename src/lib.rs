@@ -21,6 +21,13 @@ use nsh as platform;
 #[cfg(target_os = "android")]
 platform::main!(platform::Root::of::<App>());
 
+// The app's Rust root for the dev server's `DevEvent::Root`: the `root!` macro
+// defines `nsh_app_root`, which the dev client looks up via `dlsym` to run the
+// app in `DevActivity` (launched by `nsh test --target android`). Only compiled
+// on Android.
+#[cfg(target_os = "android")]
+platform::root!(platform::Root::of::<App>());
+
 /// A single TODO item.
 #[derive(Clone, PartialEq)]
 struct Todo {

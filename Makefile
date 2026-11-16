@@ -213,6 +213,19 @@ ANDROID_TRIPLES := aarch64-linux-android:arm64-v8a:aarch64-linux-android26-clang
                    x86_64-linux-android:x86_64:x86_64-linux-android26-clang \
                    armv7-linux-androideabi:armeabi-v7a:armv7a-linux-androideabi26-clang
 
+# Compute the adb device serial (prefer emulator, else first attached device).
+# Returns empty string if no device is found.
+ANDROID_SERIAL := $(shell \
+    SERIAL=$$(adb devices -l 2>/dev/null | grep -E "^emulator-" | head -n 1 | awk '{print $$1}'); \
+    if [ -z "$$SERIAL" ]; then \
+        SERIAL=$$(adb devices 2>/dev/null | grep -E "[[:space:]]device$$" | head -n 1 | awk '{print $$1}'); \
+    fi; \
+    echo "$$SERIAL" \
+)
+APP_PACKAGE := com.example.nshexample
+MAIN_ACTIVITY := com.longbridge.nsh.AppActivity
+APK := $(ANDROID_DIR)/app/build/outputs/apk/debug/app-debug.apk
+
 android-build:
 	@set -e; \
 	NDK=$(ANDROID_NDK); \
@@ -252,36 +265,38 @@ android-build:
 	echo "    -> $(ANDROID_DIR)/app/src/main/jniLibs/armeabi-v7a/libnsh.so"
 
 # Build the debug APK and install it onto a device attached via adb.
-# The APK lives at android/app/build/outputs/apk/debug/app-debug.apk.
-#
-# Note: the explanatory comments below live ABOVE this recipe, not inside it —
-# a '#' comment line inside a '\'-continued recipe makes make split the recipe
-# into separate shells, so a shell variable set before the comment would not
-# be visible inside the install block. The APK path is therefore a Make
-# variable ($(APK)) expanded on every line rather than a shell variable.
+# The APK lives at $(APK).
 android-install: android-build
 	@command -v adb >/dev/null 2>&1 || { echo "error: adb not found in PATH" >&2; exit 1; }; \
 	adb devices | grep -qE "[[:space:]]device$$" || { echo "error: no adb device attached" >&2; exit 1; }; \
-	# Pin a device: prefer the emulator, else the first attached device (adb
-	# errors with 'more than one device' otherwise). SERIAL is a shell variable
-	# here, so it is visible inside the install block below.
-	SERIAL=$$(adb devices -l | grep -E "^emulator-" | head -n 1 | awk '{print $$1}'); \
-	if [ -z "$$SERIAL" ]; then \
-		SERIAL=$$(adb devices | grep -E "[[:space:]]device$$" | head -n 1 | awk '{print $$1}'); \
-	fi; \
-	echo "==> installing on $$SERIAL"; \
+	echo "==> installing on $(ANDROID_SERIAL)"; \
 	GRADLE_USER_HOME=$(GRADLE_USER_HOME) ANDROID_HOME=$(ANDROID_HOME) $(ANDROID_DIR)/gradlew -p $(ANDROID_DIR) :app:assembleDebug --no-daemon && { \
-		APK=$(ANDROID_DIR)/app/build/outputs/apk/debug/app-debug.apk; \
-		adb -s $$SERIAL install -r "$$APK" || { \
+		adb -s $(ANDROID_SERIAL) install -r "$(APK)" || { \
 			echo "install -r failed (likely a debug-signature conflict); uninstalling and retrying" >&2; \
-			adb -s $$SERIAL uninstall com.example.nshexample >/dev/null 2>&1; \
-			adb -s $$SERIAL install -r "$$APK"; \
+			adb -s $(ANDROID_SERIAL) uninstall com.example.nshexample >/dev/null 2>&1; \
+			adb -s $(ANDROID_SERIAL) install -r "$(APK)"; \
 		}; \
 	}
 
+# Build the debug APK, install it, and launch the app.
+# This is the canonical "get the app running" target; other targets depend on it.
+# Non-blocking: am start returns immediately after launching.
+android-run: android-install
+	echo "==> launching $(APP_PACKAGE)/$(MAIN_ACTIVITY) on $(ANDROID_SERIAL)"; \
+	adb -s $(ANDROID_SERIAL) shell am start -n $(APP_PACKAGE)/$(MAIN_ACTIVITY)
+
+# Uninstall the app from a device attached via adb.
+# Useful when the app was installed with a different signature (e.g. from
+# the nsh CLI) and `make android-install` fails with INSTALL_FAILED_UPDATE_INCOMPATIBLE.
+android-uninstall:
+	@command -v adb >/dev/null 2>&1 || { echo "error: adb not found in PATH" >&2; exit 1; }; \
+	adb devices | grep -qE "[[:space:]]device$$" || { echo "error: no adb device attached" >&2; exit 1; }; \
+	echo "==> uninstalling from $(ANDROID_SERIAL)"; \
+	adb -s $(ANDROID_SERIAL) uninstall com.example.nshexample
+
 # Take per-view screenshots of the app by driving it through the `dev` host.
 #
-# `android-install` (below) builds the app (with the `dev` feature) and installs
+# `android-run` builds the app (with the `dev` feature), installs and launches
 # it, then this builds the host-side `android-ui-tests` driver and runs it: it
 # starts a dev server, points the app's `DevActivity` at it over `adb reverse`,
 # drives a short scripted sequence, and writes the frame-synced screenshots to
@@ -291,20 +306,22 @@ android-install: android-build
 # shared target/ dir and is built only for the host target (the root workspace's
 # iOS default target is overridden by --target below). The cargo registry is
 # already fetched, so the default (read-only) CARGO_HOME is fine.
-android-ui-tests: android-install
-	@command -v adb >/dev/null 2>&1 || { echo "error: adb not found in PATH" >&2; exit 1; }; \
-	adb devices | grep -qE "[[:space:]]device$$" || { echo "error: no adb device attached" >&2; exit 1; }; \
+android-ui-tests: android-run
 	HOST_TARGET=$(shell rustc --print host-tuple); \
-	# Prefer the emulator (what you started), else the first attached device. \
-	SERIAL=$$(adb devices -l | grep -E "^emulator-" | head -n 1 | awk '{print $$1}'); \
-	if [ -z "$$SERIAL" ]; then \
-		SERIAL=$$(adb devices | grep -E "[[:space:]]device$$" | head -n 1 | awk '{print $$1}'); \
-	fi; \
-	echo "==> building the host-side driver for $$HOST_TARGET (device $$SERIAL)"; \
+	echo "==> building the host-side driver for $$HOST_TARGET (device $(ANDROID_SERIAL))"; \
 	cargo build --release --target $$HOST_TARGET -p android-ui-tests; \
 	echo "==> running the driver (snapshots -> $(ANDROID_DIR)/snapshots)"; \
 	$(PWD)/target/$$HOST_TARGET/release/android-ui-tests \
-		$(ANDROID_DIR)/snapshots --device $$SERIAL
+		$(ANDROID_DIR)/snapshots --device $(ANDROID_SERIAL)
+
+# Take a screenshot of the currently-displayed app screen.
+# `android-run` builds, installs, and launches the app, then this captures
+# the screen via `adb exec-out screencap -p`.
+android-screenshot: android-run
+	time 5
+	echo "==> capturing screenshot on $(ANDROID_SERIAL)"; \
+	adb -s $(ANDROID_SERIAL) exec-out screencap -p > android/screenshot.png; \
+	echo "    -> android/screenshot.png"
 
 # Android env is exported so downstream targets (e.g. adb install) inherit it.
 EXPORT_ALL_VARIABLES:
