@@ -283,34 +283,19 @@ android-build: $(NSH_AAR)
 	cp target/armv7-linux-androideabi/release/libnsh_app_nsh_example.so $(ANDROID_DIR)/app/src/main/jniLibs/armeabi-v7a/libnsh.so; \
 	echo "    -> $(ANDROID_DIR)/app/src/main/jniLibs/armeabi-v7a/libnsh.so"
 
-# Build the debug APK and install it onto a device attached via adb.
-# The APK lives at $(APK).
-android-install: android-build
-	@command -v adb >/dev/null 2>&1 || { echo "error: adb not found in PATH" >&2; exit 1; }; \
-	adb devices | grep -qE "[[:space:]]device$$" || { echo "error: no adb device attached" >&2; exit 1; }; \
-	echo "==> installing on $(ANDROID_SERIAL)"; \
-	GRADLE_USER_HOME=$(GRADLE_USER_HOME) ANDROID_HOME=$(ANDROID_HOME) $(ANDROID_DIR)/gradlew -p $(ANDROID_DIR) :app:assembleDebug && { \
-		adb -s $(ANDROID_SERIAL) install -r "$(APK)" || { \
-			echo "install -r failed (likely a debug-signature conflict); uninstalling and retrying" >&2; \
-			adb -s $(ANDROID_SERIAL) uninstall com.example.nshexample >/dev/null 2>&1; \
-			adb -s $(ANDROID_SERIAL) install -r "$(APK)"; \
-		}; \
+android-apk: android-build
+	GRADLE_USER_HOME=$(GRADLE_USER_HOME) ANDROID_HOME=$(ANDROID_HOME) $(ANDROID_DIR)/gradlew -p $(ANDROID_DIR) :app:assembleDebug
+
+android-install: android-apk
+	adb -s $(ANDROID_SERIAL) install -r "$(APK)" || { \
+		adb -s $(ANDROID_SERIAL) uninstall com.example.nshexample >/dev/null 2>&1; \
+		adb -s $(ANDROID_SERIAL) install -r "$(APK)"; \
 	}
 
-# Build the debug APK, install it, and launch the app.
-# This is the canonical "get the app running" target; other targets depend on it.
-# Non-blocking: am start returns immediately after launching.
 android-run: android-install
-	echo "==> launching $(APP_PACKAGE)/$(MAIN_ACTIVITY) on $(ANDROID_SERIAL)"; \
 	adb -s $(ANDROID_SERIAL) shell am start -n $(APP_PACKAGE)/$(MAIN_ACTIVITY)
 
-# Uninstall the app from a device attached via adb.
-# Useful when the app was installed with a different signature (e.g. from
-# the nsh CLI) and `make android-install` fails with INSTALL_FAILED_UPDATE_INCOMPATIBLE.
 android-uninstall:
-	@command -v adb >/dev/null 2>&1 || { echo "error: adb not found in PATH" >&2; exit 1; }; \
-	adb devices | grep -qE "[[:space:]]device$$" || { echo "error: no adb device attached" >&2; exit 1; }; \
-	echo "==> uninstalling from $(ANDROID_SERIAL)"; \
 	adb -s $(ANDROID_SERIAL) uninstall com.example.nshexample
 
 # Take per-view screenshots of the app by driving it through the `dev` host.
@@ -324,25 +309,17 @@ android-uninstall:
 # `android-ui-tests` is a member of the root workspace, so it builds into the
 # shared target/ dir and is built only for the host target (the root workspace's
 # iOS default target is overridden by --target below). The cargo registry is
-# already fetched, so the default (read-only) CARGO_HOME is fine.
 android-ui-tests: android-run
 	HOST_TARGET=$(shell rustc --print host-tuple); \
-	echo "==> building the host-side driver for $$HOST_TARGET (device $(ANDROID_SERIAL))"; \
 	cargo build --release --target $$HOST_TARGET -p android-ui-tests; \
-	echo "==> running the driver (snapshots -> $(ANDROID_DIR)/snapshots)"; \
 	$(PWD)/target/$$HOST_TARGET/release/android-ui-tests \
 		$(ANDROID_DIR)/snapshots --device $(ANDROID_SERIAL)
 
-# Take a screenshot of the currently-displayed app screen.
-# `android-run` builds, installs, and launches the app, then this captures
-# the screen via `adb exec-out screencap -p`.
 android-screenshot: android-run
 	sleep 5
-	echo "==> capturing screenshot on $(ANDROID_SERIAL)"; \
-	adb -s $(ANDROID_SERIAL) exec-out screencap -p > android/screenshot.png; \
-	echo "    -> android/screenshot.png"
+	adb -s $(ANDROID_SERIAL) exec-out screencap -p > android/screenshot.png
 
-# Android env is exported so downstream targets (e.g. adb install) inherit it.
+# Environment variables for iOS targets (Android targets use ANDROID_*)
 EXPORT_ALL_VARIABLES:
 SIMCTL_CHILD_RUST_BACKTRACE=full
 SIMCTL_CHILD_RUST_LOG=trace
