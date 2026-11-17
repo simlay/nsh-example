@@ -1,18 +1,16 @@
-// The nsh Android runtime as a library AAR.
+// The nsh Android runtime as a library.
 //
-// It compiles the nsh runtime's own Java sources (the `com.longbridge.nsh`
-// package: `AppActivity`, `NshView`, `Native`, …) straight from the nsh
-// source tree, so it stays in step with the runtime crate. It ships no
-// native library — the `:app` module provides `libnsh.so`.
-//
-// See `nsh/docs/dev/embedding.md` for how the runtime and hosts fit together.
+// It uses the prebuilt nsh.aar from the nsh-embed-android release package.
+// The AAR includes the runtime's Java classes and native libraries.
+// This module simply depends on the AAR without declaring its own namespace
+// to avoid conflicts with the AAR's embedded namespace.
 
 plugins {
     id("com.android.library") version "8.5.2" apply true
 }
 
 android {
-    namespace = "com.longbridge.nsh"
+    namespace = "com.longbridge.runtime"
     compileSdk = 35
 
     defaultConfig {
@@ -24,13 +22,16 @@ android {
         targetCompatibility = JavaVersion.VERSION_11
     }
 
-    // The runtime's Java lives in the nsh source tree; compile it in place
-    // rather than copying it, so updates to the runtime propagate here. The
-    // nsh checkout sits beside this Gradle project (nsh-example/nsh), one
-    // level up from the Gradle root (this android/ directory).
-    sourceSets {
-        getByName("main") {
-            java.srcDir("${project.rootDir}/../nsh/crates/nsh-platform-android/java")
+    packaging {
+        // Exclude the AAR's native libraries since we provide our own
+        // via :app's jniLibs/<abi>/libnsh.so. This prevents the warning:
+        // "2 files found for path 'lib/arm64-v8a/libnsh.so'"
+        jniLibs {
+            excludes += "**/libnsh.so"
         }
     }
+}
+
+dependencies {
+    implementation(files("libs/nsh.aar"))
 }

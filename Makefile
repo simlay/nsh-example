@@ -200,7 +200,8 @@ ui-tests-run-swift: install-swift ui-tests-install ui-tests-xctest-configuration
 # ---------------------------------------------------------------------------
 
 ANDROID_DIR=android
-# The Gradle project lives in android/ beside the nsh checkout (nsh-example/nsh).
+# The Gradle project lives in android/; the nsh runtime is provided by the
+# nsh.aar from the nsh-embed-android release package (android/runtime/libs/).
 # Override ANDROID_HOME in the shell to relocate the SDK/NDK.
 ANDROID_HOME ?= /opt/projects/Android/Sdk
 ANDROID_NDK ?= $(shell for v in 29 27 26; do d=$$(ls -d $(ANDROID_HOME)/ndk/$$v.* 2>/dev/null | head -1); test -n "$$d" && echo "$$d" && exit 0; done; echo $(ANDROID_HOME)/ndk/26.3.11579264)
@@ -226,7 +227,30 @@ APP_PACKAGE := com.example.nshexample
 MAIN_ACTIVITY := com.longbridge.nsh.AppActivity
 APK := $(ANDROID_DIR)/app/build/outputs/apk/debug/app-debug.apk
 
-android-build:
+# The nsh runtime AAR is downloaded from GitHub releases.
+# Override NSH_VERSION to use a specific version (default: latest).
+NSH_VERSION ?= latest
+NSH_CACHE := $(ANDROID_DIR)/.cache
+NSH_EMBED_ZIP := $(NSH_CACHE)/nsh-embed-android.zip
+NSH_AAR := $(ANDROID_DIR)/runtime/libs/nsh.aar
+
+# Download the nsh-embed-android.zip from GitHub releases.
+$(NSH_AAR): $(NSH_EMBED_ZIP)
+	@mkdir -p $$(dirname $(NSH_AAR))
+	unzip -o $(NSH_EMBED_ZIP) "nsh-embed-android/nsh.aar" -d $(NSH_CACHE)
+	cp $(NSH_CACHE)/nsh-embed-android/nsh.aar $(NSH_AAR)
+
+$(NSH_EMBED_ZIP):
+	@mkdir -p $(NSH_CACHE)
+ifeq ($(NSH_VERSION),latest)
+	echo "==> downloading latest nsh-embed-android.zip";
+	curl -fsSL https://github.com/longbridge/nsh/releases/latest/download/nsh-embed-android.zip -o $(NSH_EMBED_ZIP);
+else
+	echo "==> downloading nsh-embed-android.zip v$(NSH_VERSION)";
+	curl -fsSL https://github.com/longbridge/nsh/releases/download/v$(NSH_VERSION)/nsh-embed-android.zip -o $(NSH_EMBED_ZIP);
+endif
+
+android-build: $(NSH_AAR)
 	@set -e; \
 	NDK=$(ANDROID_NDK); \
 	OS_NAME=$$(echo "$$(uname -s)" | tr '[:upper:]' '[:lower:]'); \
@@ -265,7 +289,7 @@ android-install: android-build
 	@command -v adb >/dev/null 2>&1 || { echo "error: adb not found in PATH" >&2; exit 1; }; \
 	adb devices | grep -qE "[[:space:]]device$$" || { echo "error: no adb device attached" >&2; exit 1; }; \
 	echo "==> installing on $(ANDROID_SERIAL)"; \
-	GRADLE_USER_HOME=$(GRADLE_USER_HOME) ANDROID_HOME=$(ANDROID_HOME) $(ANDROID_DIR)/gradlew -p $(ANDROID_DIR) :app:assembleDebug --no-daemon && { \
+	GRADLE_USER_HOME=$(GRADLE_USER_HOME) ANDROID_HOME=$(ANDROID_HOME) $(ANDROID_DIR)/gradlew -p $(ANDROID_DIR) :app:assembleDebug && { \
 		adb -s $(ANDROID_SERIAL) install -r "$(APK)" || { \
 			echo "install -r failed (likely a debug-signature conflict); uninstalling and retrying" >&2; \
 			adb -s $(ANDROID_SERIAL) uninstall com.example.nshexample >/dev/null 2>&1; \
@@ -313,7 +337,7 @@ android-ui-tests: android-run
 # `android-run` builds, installs, and launches the app, then this captures
 # the screen via `adb exec-out screencap -p`.
 android-screenshot: android-run
-	time 5
+	sleep 5
 	echo "==> capturing screenshot on $(ANDROID_SERIAL)"; \
 	adb -s $(ANDROID_SERIAL) exec-out screencap -p > android/screenshot.png; \
 	echo "    -> android/screenshot.png"

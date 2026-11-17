@@ -17,6 +17,8 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // Local maven cache for faster rebuilds
+        mavenLocal()
     }
 }
 
