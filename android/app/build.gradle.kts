@@ -9,6 +9,9 @@
 //
 // The `libnsh.so` is built by cargo + the NDK and copied into `jniLibs` by
 // the repo root `Makefile` (`make android-build`), not by Gradle.
+//
+// ABI splits are enabled so each APK contains only the native lib for one ABI,
+// reducing APK size from ~200MB to ~55-75MB.
 
 plugins {
     id("com.android.application") version "8.5.2" apply true
@@ -39,6 +42,16 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+    }
+
+    splits {
+        abi {
+            // Build separate APKs per ABI for smaller file sizes
+            isEnable = true
+            reset()
+            include("arm64-v8a", "armeabi-v7a", "x86_64")
+            isUniversalApk = false
+        }
     }
 }
 

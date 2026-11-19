@@ -284,12 +284,20 @@ android-build: $(NSH_AAR)
 	echo "    -> $(ANDROID_DIR)/app/src/main/jniLibs/armeabi-v7a/libnsh.so"
 
 android-apk: android-build
+	# Build APK with ABI splits - each APK contains only the native lib for one ABI
 	GRADLE_USER_HOME=$(GRADLE_USER_HOME) ANDROID_HOME=$(ANDROID_HOME) $(ANDROID_DIR)/gradlew -p $(ANDROID_DIR) :app:assembleDebug
 
 android-install: android-apk
-	adb -s $(ANDROID_SERIAL) install -r "$(APK)" || { \
+	@TARGET_ABI=$$(adb -s $(ANDROID_SERIAL) shell getprop ro.product.cpu.abi 2>/dev/null || echo "arm64-v8a"); \
+	case "$$TARGET_ABI" in \
+		arm64-v8a) APK_FILE="app-arm64-v8a-debug.apk" ;; \
+		armeabi-v7a) APK_FILE="app-armeabi-v7a-debug.apk" ;; \
+		x86_64) APK_FILE="app-x86_64-debug.apk" ;; \
+		*) APK_FILE="app-arm64-v8a-debug.apk" ;; \
+	 esac; \
+	adb -s $(ANDROID_SERIAL) install -r "$(ANDROID_DIR)/app/build/outputs/apk/debug/$$APK_FILE" || { \
 		adb -s $(ANDROID_SERIAL) uninstall com.example.nshexample >/dev/null 2>&1; \
-		adb -s $(ANDROID_SERIAL) install -r "$(APK)"; \
+		adb -s $(ANDROID_SERIAL) install -r "$(ANDROID_DIR)/app/build/outputs/apk/debug/$$APK_FILE"; \
 	}
 
 android-run: android-install
